@@ -5,6 +5,7 @@
     "meganrogge.template-string-converter",
     "oven.bun-vscode",
     "dbaeumer.vscode-eslint",
-    "Prisma.prisma"
+    "Prisma.prisma",
+    "esbenp.prettier-vscode"
   ]
 }

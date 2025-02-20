@@ -8,14 +8,15 @@
     "lint:fix": "bun x eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
-    "elysia": "^1.2.10",
-    "env-var": "^7.5.0",
-    "@prisma/client": "^6.1.0",
+    "@bogeychan/elysia-logger": "^0.1.7",
     "@elysiajs/cors": "^1.2.0",
     "@elysiajs/jwt": "^1.2.0",
     "@elysiajs/swagger": "^1.2.0",
-    "@bogeychan/elysia-logger": "^0.1.7",
-    "@verrou/core": "^0.5.1"
+    "@prisma/client": "^6.1.0",
+    "@verrou/core": "^0.5.1",
+    "elysia": "^1.2.10",
+    "env-var": "^7.5.0",
+    "minio": "^8.0.4"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
