@@ -3,11 +3,9 @@ import Elysia from "elysia";
 import { config } from "../config";
 
 const JwtPlugin = new Elysia()
+  .use(jwt({ name: "accessJwt", secret: config.JWT_ACCESS_SECRET, exp: "15m" }))
   .use(
-    jwt({ name: "accessToken", secret: config.JWT_ACCESS_SECRET, exp: "15m" })
-  )
-  .use(
-    jwt({ name: "refreshToken", secret: config.JWT_REFRESH_SECRET, exp: "7d" })
+    jwt({ name: "refreshJwt", secret: config.JWT_REFRESH_SECRET, exp: "7d" })
   )
   .as("plugin");
 

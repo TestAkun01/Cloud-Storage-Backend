@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { Elysia } from "elysia";
 import FileController from "./controllers/file.controller.ts";
+import UserController from "./controllers/auth.controller.ts";
 
 export const app = new Elysia()
   .use(
@@ -17,4 +18,5 @@ export const app = new Elysia()
       methods: ["GET", "POST", "DELETE"],
     })
   )
+  .use(UserController)
   .use(FileController);
