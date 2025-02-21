@@ -30,4 +30,5 @@ export const config = {
   MINIO_ACCESS_KEY: env.get("MINIO_ACCESS_KEY").required().asString(),
   MINIO_SECRET_KEY: env.get("MINIO_SECRET_KEY").required().asString(),
   MINIO_USE_SSL: env.get("MINIO_USE_SSL").default("true").asBool(),
+  MINIO_BUCKET_NAME: env.get("MINIO_BUCKET_NAME").required().asString(),
 };

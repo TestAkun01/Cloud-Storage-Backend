@@ -21,6 +21,7 @@ model User {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
     refreshToken  RefreshToken[]
+    files     File[]
   }
 
 
@@ -38,11 +39,14 @@ model RefreshToken {
 
 model File {
   id          Int      @id @default(autoincrement())
+  userId      String   
   name        String
   size        Int
   type        String
   bucket      String
-  path        String
+  path        String   @unique  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

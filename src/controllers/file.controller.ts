@@ -3,296 +3,325 @@ import { prisma } from "../db";
 import minioClient from "../services/minio";
 import JwtPlugin from "../plugins/jwt";
 import { BucketItem, S3Error } from "minio";
+import { config } from "../config";
 
-const FileController = new Elysia({ prefix: "/files" }).use(JwtPlugin).guard(
-  {
-    beforeHandle: async ({ accessJwt, headers, error }) => {
-      const token = headers["authorization"]?.split(" ")[1];
-      if (!token) {
-        return error(401, {
-          success: false,
-          message: "Unauthorized",
-          error: {
-            code: "MISSING_TOKEN",
-            details: "No authorization token provided",
+const FileController = new Elysia({ prefix: "/files" })
+  .use(JwtPlugin)
+  .derive(async ({ headers, accessJwt, error }) => {
+    const token = headers["authorization"]?.split(" ")[1];
+    if (!token) {
+      return error(401, {
+        success: false,
+        message: "Unauthorized",
+        error: {
+          code: "MISSING_TOKEN",
+          details: "No authorization token provided",
+        },
+      });
+    }
+
+    const payload = await accessJwt.verify(token);
+    if (!payload) {
+      return error(401, {
+        success: false,
+        message: "Unauthorized",
+        error: {
+          code: "INVALID_TOKEN",
+          details: "Invalid or expired token",
+        },
+      });
+    }
+    return { user: payload };
+  })
+  .get("/", async ({ error }) => {
+    try {
+      const files = await prisma.file.findMany();
+      return {
+        success: true,
+        message: "Files fetched successfully",
+        data: files,
+      };
+    } catch (err) {
+      console.error(err);
+      return error(500, {
+        success: false,
+        message: "Failed to fetch files",
+        error: {
+          code: "FETCH_FAILED",
+          details: "An error occurred while fetching files.",
+        },
+      });
+    }
+  })
+  .post(
+    "/upload",
+    async ({ body, error, user }) => {
+      try {
+        const { file, path = "" } = body;
+        if (!file) {
+          return error(400, {
+            success: false,
+            message: "No file provided",
+            error: {
+              code: "NO_FILE",
+              details: "Please provide a file to upload.",
+            },
+          });
+        }
+
+        const bucket = config.MINIO_BUCKET_NAME;
+        const userId = user.id!.toString();
+        let fileName = file.name;
+        let fullPath = `${userId}/${path}${path ? "/" : ""}${fileName}`; // Format path berdasarkan user ID
+
+        let exists = true;
+        let counter = 1;
+        while (exists) {
+          try {
+            await minioClient.statObject(bucket, fullPath);
+            const extIndex = fileName.lastIndexOf(".");
+            const nameWithoutExt =
+              extIndex !== -1 ? fileName.slice(0, extIndex) : fileName;
+            const ext = extIndex !== -1 ? fileName.slice(extIndex) : "";
+            fileName = `${nameWithoutExt}(${counter})${ext}`;
+            fullPath = `${userId}/${path}${path ? "/" : ""}${fileName}`;
+            counter++;
+          } catch (err) {
+            exists = false; // Jika file tidak ditemukan, keluar dari loop
+          }
+        }
+
+        // Upload file ke MinIO
+        const fileBuffer = Buffer.from(await file.arrayBuffer());
+        await minioClient.putObject(bucket, fullPath, fileBuffer);
+
+        // Simpan metadata ke database
+        const savedFile = await prisma.file.create({
+          data: {
+            userId,
+            name: fileName,
+            size: file.size,
+            type: file.type,
+            bucket,
+            path: fullPath,
           },
         });
-      }
 
-      const payload = await accessJwt.verify(token);
-      if (!payload) {
-        return error(401, {
+        return {
+          success: true,
+          message: "File uploaded successfully",
+          data: savedFile,
+        };
+      } catch (err) {
+        console.error(err);
+        return error(500, {
           success: false,
-          message: "Unauthorized",
+          message: "File upload failed",
           error: {
-            code: "INVALID_TOKEN",
-            details: "Invalid or expired token",
+            code: "UPLOAD_FAILED",
+            details: "An error occurred while uploading the file.",
           },
         });
       }
     },
-  },
-  (app) =>
-    app
-      .get("/", async ({ error }) => {
-        try {
-          const files = await prisma.file.findMany();
-          return {
-            success: true,
-            message: "Files fetched successfully",
-            data: files,
-          };
-        } catch (err) {
-          console.error(err);
-          return error(500, {
-            success: false,
-            message: "Failed to fetch files",
-            error: {
-              code: "FETCH_FAILED",
-              details: "An error occurred while fetching files.",
-            },
-          });
-        }
-      })
-      .post(
-        "/upload",
-        async ({ body, error }) => {
-          try {
-            const { file } = body;
-            if (!file) {
-              return error(400, {
-                success: false,
-                message: "No file provided",
-                error: {
-                  code: "NO_FILE",
-                  details: "Please provide a file to upload.",
-                },
-              });
-            }
+    {
+      body: t.Object({
+        file: t.File(),
+        path: t.Optional(t.String()), // Tambahkan path opsional dari user
+      }),
+    }
+  )
 
-            const bucket = "cloud-storage";
-            const fileName = `${Date.now()}-${file.name}`;
-            const fileBuffer = Buffer.from(await file.arrayBuffer());
-            await minioClient.putObject(bucket, fileName, fileBuffer);
+  .get("/download/*", async ({ params, set, error, user }) => {
+    try {
+      const path = params["*"];
+      const file = await prisma.file.findFirst({
+        where: { path, userId: user.id!.toString() },
+      });
 
-            const savedFile = await prisma.file.create({
-              data: {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                bucket,
-                path: fileName,
-              },
-            });
+      if (!file) {
+        return error(404, {
+          success: false,
+          message: "File not found",
+          error: {
+            code: "FILE_NOT_FOUND",
+            details: "The requested file does not exist.",
+          },
+        });
+      }
 
-            return {
-              success: true,
-              message: "File uploaded successfully",
-              data: savedFile,
-            };
-          } catch (err) {
-            console.error(err);
-            return error(500, {
-              success: false,
-              message: "File upload failed",
-              error: {
-                code: "UPLOAD_FAILED",
-                details: "An error occurred while uploading the file.",
-              },
-            });
-          }
+      const fileStream = await minioClient.getObject(file.bucket, file.path);
+      set.headers["content-disposition"] = `attachment filename="${file.name}"`;
+      return fileStream;
+    } catch (err) {
+      console.error(err);
+      return error(500, {
+        success: false,
+        message: "File download failed",
+        error: {
+          code: "DOWNLOAD_FAILED",
+          details: "An error occurred while downloading the file.",
         },
-        {
-          body: t.Object({
-            file: t.File(),
-          }),
-        }
-      )
-      .get("/download/:fileName", async ({ params, set, error }) => {
-        try {
-          const { fileName } = params;
-          const file = await prisma.file.findFirst({
-            where: { path: fileName },
-          });
+      });
+    }
+  })
+  .delete("/*", async ({ params, error, user }) => {
+    try {
+      const path = params["*"];
+      const file = await prisma.file.findUnique({
+        where: { path, userId: user.id!.toString() },
+      });
+      console.log(path);
 
-          if (!file) {
-            return error(404, {
-              success: false,
-              message: "File not found",
-              error: {
-                code: "FILE_NOT_FOUND",
-                details: "The requested file does not exist.",
-              },
-            });
+      if (!file) {
+        return error(404, {
+          success: false,
+          message: "File not found",
+          error: {
+            code: "FILE_NOT_FOUND",
+            details: "The requested file does not exist.",
+          },
+        });
+      }
+
+      await minioClient.removeObject(file.bucket, file.path);
+      await prisma.file.delete({ where: { path } });
+
+      return {
+        success: true,
+        message: "File deleted successfully",
+      };
+    } catch (err) {
+      console.error(err);
+      return error(500, {
+        success: false,
+        message: "File deletion failed",
+        error: {
+          code: "DELETE_FAILED",
+          details: "An error occurred while deleting the file.",
+        },
+      });
+    }
+  })
+  .get("/list", async ({ query, error, user }) => {
+    try {
+      const { prefix = "" } = query;
+
+      const filesStream = minioClient.listObjectsV2(
+        "cloud-storage",
+        prefix,
+        true,
+        "/"
+      );
+
+      const folders: { type: string; name: string }[] = [];
+      const fileList: ({ type: string } & BucketItem)[] = [];
+
+      await new Promise((resolve, reject) => {
+        filesStream.on("data", (obj) => {
+          if (obj.prefix) {
+            folders.push({ type: "folder", name: obj.prefix });
+          } else {
+            fileList.push({ type: "file", ...obj });
           }
+        });
 
-          const fileStream = await minioClient.getObject(
-            file.bucket,
-            file.path
-          );
-          set.headers[
-            "content-disposition"
-          ] = `attachment; filename="${file.name}"`;
-          return fileStream;
-        } catch (err) {
-          console.error(err);
-          return error(500, {
-            success: false,
-            message: "File download failed",
-            error: {
-              code: "DOWNLOAD_FAILED",
-              details: "An error occurred while downloading the file.",
-            },
-          });
-        }
-      })
-      .delete("/:fileName", async ({ params, error }) => {
-        try {
-          const { fileName } = params;
-          const file = await prisma.file.findFirst({
-            where: { path: fileName },
-          });
+        filesStream.on("end", resolve);
+        filesStream.on("error", reject);
+      });
 
-          if (!file) {
-            return error(404, {
-              success: false,
-              message: "File not found",
-              error: {
-                code: "FILE_NOT_FOUND",
-                details: "The requested file does not exist.",
-              },
-            });
-          }
+      const userFiles = await prisma.file.findMany({
+        where: {
+          userId: user.id!.toString(),
+          path: {
+            in: fileList
+              .map((file) => file.name)
+              .filter((name): name is string => !!name),
+          },
+        },
+      });
 
-          await minioClient.removeObject(file.bucket, file.path);
-          await prisma.file.deleteMany({ where: { path: fileName } });
+      return {
+        success: true,
+        data: { folders, files: userFiles },
+      };
+    } catch (err) {
+      return error(500, {
+        success: false,
+        message: "Failed to list files",
+        error: {
+          code: "LIST_ERROR",
+          details: "An error occurred while listing the files.",
+        },
+      });
+    }
+  })
+  .get("/search", async ({ query, error, user }) => {
+    try {
+      const { keyword } = query;
+      const files = await prisma.file.findMany({
+        where: {
+          userId: user.id!.toString(),
+          name: { contains: keyword },
+        },
+      });
 
-          return {
-            success: true,
-            message: "File deleted successfully",
-          };
-        } catch (err) {
-          console.error(err);
-          return error(500, {
-            success: false,
-            message: "File deletion failed",
-            error: {
-              code: "DELETE_FAILED",
-              details: "An error occurred while deleting the file.",
-            },
-          });
-        }
-      })
-      .get("/list", async ({ query, error }) => {
-        try {
-          const { prefix = "" } = query;
+      return {
+        success: true,
+        data: files,
+      };
+    } catch (err) {
+      return error(500, {
+        success: false,
+        message: "Search failed",
+        error: {
+          code: "SEARCH_ERROR",
+          details: "An error occurred while searching for files.",
+        },
+      });
+    }
+  })
+  .get("/share/*", async ({ params, error }) => {
+    try {
+      const path = params["*"];
 
-          const filesStream = minioClient.listObjectsV2(
-            "cloud-storage",
-            prefix,
-            true,
-            "/"
-          );
+      const file = await prisma.file.findUnique({
+        where: { path: path },
+      });
 
-          const folders: { type: string; name: string }[] = [];
-          const fileList: (BucketItem & { type: string })[] = [];
+      if (!file) {
+        return error(404, {
+          success: false,
+          message: "File not found",
+          error: {
+            code: "FILE_NOT_FOUND",
+            details: "File does not exist",
+          },
+        });
+      }
 
-          await new Promise((resolve, reject) => {
-            filesStream.on("data", (obj) => {
-              if (obj.prefix) {
-                folders.push({ type: "folder", name: obj.prefix });
-              } else {
-                fileList.push({ type: "file", ...obj });
-              }
-            });
+      const presignedUrl = await minioClient.presignedGetObject(
+        file.bucket,
+        file.path,
+        24 * 60 * 60
+      );
 
-            filesStream.on("end", resolve);
-            filesStream.on("error", reject);
-          });
+      return {
+        success: true,
+        data: { presignedUrl },
+      };
+    } catch (err) {
+      console.error("Error share links:", err);
 
-          return {
-            success: true,
-            data: { folders, files: fileList },
-          };
-        } catch (err) {
-          return error(500, {
-            success: false,
-            message: "Failed to list files",
-            error: {
-              code: "LIST_ERROR",
-              details: "An error occurred while listing the files.",
-            },
-          });
-        }
-      })
-
-      .get("/search", async ({ query, error }) => {
-        try {
-          const { keyword } = query;
-          const files = await prisma.file.findMany({
-            where: {
-              name: { contains: keyword },
-            },
-          });
-
-          return {
-            success: true,
-            data: files,
-          };
-        } catch (err) {
-          return error(500, {
-            success: false,
-            message: "Search failed",
-            error: {
-              code: "SEARCH_ERROR",
-              details: "An error occurred while searching for files.",
-            },
-          });
-        }
-      })
-      .get("/share/:fileName", async ({ params, error }) => {
-        try {
-          const { fileName } = params;
-          console.log(fileName);
-
-          const file = await prisma.file.findFirst({
-            where: { path: fileName },
-          });
-
-          if (!file) {
-            return error(404, {
-              success: false,
-              message: "File not found",
-              error: {
-                code: "FILE_NOT_FOUND",
-                details: "File does not exist",
-              },
-            });
-          }
-
-          const presignedUrl = await minioClient.presignedGetObject(
-            file.bucket,
-            file.path,
-            24 * 60 * 60
-          );
-
-          return {
-            success: true,
-            data: { presignedUrl },
-          };
-        } catch (err) {
-          console.error("Error share links:", err);
-
-          return error(500, {
-            success: false,
-            message: "Failed to generate shareable link",
-            error: {
-              code: "SHARE_ERROR",
-              details: "An error occurred while generating the shareable link.",
-            },
-          });
-        }
-      })
-);
+      return error(500, {
+        success: false,
+        message: "Failed to generate shareable link",
+        error: {
+          code: "SHARE_ERROR",
+          details: "An error occurred while generating the shareable link.",
+        },
+      });
+    }
+  });
 
 export default FileController;
