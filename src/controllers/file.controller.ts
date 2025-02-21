@@ -87,15 +87,13 @@ const FileController = new Elysia({ prefix: "/files" })
             fullPath = `${userId}/${path}${path ? "/" : ""}${fileName}`;
             counter++;
           } catch (err) {
-            exists = false; // Jika file tidak ditemukan, keluar dari loop
+            exists = false;
           }
         }
 
-        // Upload file ke MinIO
         const fileBuffer = Buffer.from(await file.arrayBuffer());
         await minioClient.putObject(bucket, fullPath, fileBuffer);
 
-        // Simpan metadata ke database
         const savedFile = await prisma.file.create({
           data: {
             userId,
@@ -134,7 +132,7 @@ const FileController = new Elysia({ prefix: "/files" })
 
   .get("/download/*", async ({ params, set, error, user }) => {
     try {
-      const path = params["*"];
+      const path = decodeURI(params["*"]);
       const file = await prisma.file.findFirst({
         where: { path, userId: user.id!.toString() },
       });
@@ -167,7 +165,7 @@ const FileController = new Elysia({ prefix: "/files" })
   })
   .delete("/*", async ({ params, error, user }) => {
     try {
-      const path = params["*"];
+      const path = decodeURI(params["*"]);
       const file = await prisma.file.findUnique({
         where: { path, userId: user.id!.toString() },
       });
@@ -203,87 +201,115 @@ const FileController = new Elysia({ prefix: "/files" })
       });
     }
   })
-  .get("/list", async ({ query, error, user }) => {
-    try {
-      const { prefix = "" } = query;
+  .get(
+    "/list",
+    async ({ query, error, user }) => {
+      try {
+        const prefix: string = decodeURI(query.prefix ?? "");
 
-      const filesStream = minioClient.listObjectsV2(
-        "cloud-storage",
-        prefix,
-        true,
-        "/"
-      );
+        const filesStream = minioClient.listObjectsV2(
+          "cloud-storage",
+          prefix,
+          false,
+          "/"
+        );
 
-      const folders: { type: string; name: string }[] = [];
-      const fileList: ({ type: string } & BucketItem)[] = [];
+        const folders: { type: string; name: string }[] = [];
+        const fileList: ({ type: string } & BucketItem)[] = [];
 
-      await new Promise((resolve, reject) => {
-        filesStream.on("data", (obj) => {
-          if (obj.prefix) {
-            folders.push({ type: "folder", name: obj.prefix });
-          } else {
-            fileList.push({ type: "file", ...obj });
-          }
+        await new Promise((resolve, reject) => {
+          filesStream.on("data", (obj) => {
+            if (obj.prefix) {
+              const folderName = obj.prefix
+                .replace(prefix, "")
+                .replace(/\/$/, "");
+              folders.push({ type: "folder", name: folderName });
+            } else {
+              fileList.push({ type: "file", ...obj });
+            }
+          });
+
+          filesStream.on("end", resolve);
+          filesStream.on("error", reject);
         });
 
-        filesStream.on("end", resolve);
-        filesStream.on("error", reject);
-      });
-
-      const userFiles = await prisma.file.findMany({
-        where: {
-          userId: user.id!.toString(),
-          path: {
-            in: fileList
-              .map((file) => file.name)
-              .filter((name): name is string => !!name),
+        const userFiles = await prisma.file.findMany({
+          where: {
+            userId: user.id!.toString(),
+            path: {
+              in: fileList
+                .map((file) => file.name)
+                .filter((name): name is string => !!name),
+            },
           },
-        },
-      });
+        });
+        const breadcrumbs = prefix
+          .split("/")
+          .filter((p) => p)
+          .map((name, index, arr) => ({
+            name,
+            path: arr.slice(0, index + 1).join("/") + "/",
+          }));
+        return {
+          success: true,
+          data: { folders, files: userFiles, breadcrumbs },
+        };
+      } catch (err) {
+        console.log(err);
 
-      return {
-        success: true,
-        data: { folders, files: userFiles },
-      };
-    } catch (err) {
-      return error(500, {
-        success: false,
-        message: "Failed to list files",
-        error: {
-          code: "LIST_ERROR",
-          details: "An error occurred while listing the files.",
-        },
-      });
+        return error(500, {
+          success: false,
+          message: "Failed to list files",
+          error: {
+            code: "LIST_ERROR",
+            details: "An error occurred while listing the files.",
+          },
+        });
+      }
+    },
+    {
+      query: t.Object({
+        prefix: t.Optional(t.String()),
+      }),
     }
-  })
-  .get("/search", async ({ query, error, user }) => {
-    try {
-      const { keyword } = query;
-      const files = await prisma.file.findMany({
-        where: {
-          userId: user.id!.toString(),
-          name: { contains: keyword },
-        },
-      });
+  )
+  .get(
+    "/search",
+    async ({ query, error, user }) => {
+      try {
+        const keyword = decodeURI(query.keyword);
+        const files = await prisma.file.findMany({
+          where: {
+            userId: user.id!.toString(),
+            name: { contains: keyword },
+          },
+        });
 
-      return {
-        success: true,
-        data: files,
-      };
-    } catch (err) {
-      return error(500, {
-        success: false,
-        message: "Search failed",
-        error: {
-          code: "SEARCH_ERROR",
-          details: "An error occurred while searching for files.",
-        },
-      });
+        return {
+          success: true,
+          data: files,
+        };
+      } catch (err) {
+        return error(500, {
+          success: false,
+          message: "Search failed",
+          error: {
+            code: "SEARCH_ERROR",
+            details: "An error occurred while searching for files.",
+          },
+        });
+      }
+    },
+    {
+      query: t.Object({
+        keyword: t.String(),
+      }),
     }
-  })
+  )
   .get("/share/*", async ({ params, error }) => {
     try {
-      const path = params["*"];
+      const path = decodeURI(params["*"]);
+      console.log(path);
 
       const file = await prisma.file.findUnique({
         where: { path: path },
