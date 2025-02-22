@@ -1,9 +1,10 @@
 import { logger } from "@bogeychan/elysia-logger";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import FileController from "./controllers/file.controller.ts";
 import UserController from "./controllers/auth.controller.ts";
+import html from "@elysiajs/html";
 
 export const app = new Elysia()
   .use(
@@ -11,12 +12,25 @@ export const app = new Elysia()
       level: "error",
     })
   )
+  .use(html())
   .use(swagger())
   .use(
     cors({
-      origin: ["http://127.0.0.1:5500"],
+      credentials: true,
+      origin: "https://localhost:5173",
       methods: ["GET", "POST", "DELETE"],
     })
   )
+  .get("/", () => {
+    return Bun.file("src/index.html");
+  })
+  .get("/test/:test", ({ params }) => {
+    return params;
+  })
+  .get("/test/*", ({ params }) => {
+    return params;
+  })
   .use(UserController)
   .use(FileController);
+
+export type App = typeof app;

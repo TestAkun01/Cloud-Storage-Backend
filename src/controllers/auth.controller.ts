@@ -10,7 +10,7 @@ const UserController = new Elysia({ prefix: "/auth" })
     "/register",
     async ({ body, error }) => {
       try {
-        if (zxcvbn(body.password).score < 3) {
+        if (zxcvbn(body.password).score < 2) {
           return error(400, {
             success: false,
             message: "Password is too weak, please use a stronger one",
@@ -94,18 +94,22 @@ const UserController = new Elysia({ prefix: "/auth" })
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
-        await prisma.refreshToken.upsert({
-          where: { userId: user.id },
-          update: { token: refreshToken, expiresAt },
-          create: { userId: user.id, token: refreshToken, expiresAt },
+        // Gunakan transaksi untuk operasi database
+        await prisma.$transaction(async (tx) => {
+          await tx.refreshToken.upsert({
+            where: { userId: user.id },
+            update: { token: refreshToken, expiresAt },
+            create: { userId: user.id, token: refreshToken, expiresAt },
+          });
         });
 
+        // Set cookie setelah transaksi berhasil
         cookie.refreshToken?.set({
           value: refreshToken,
           httpOnly: true,
           secure: true,
-          sameSite: "strict",
           path: "/auth",
+          sameSite: "none",
         });
 
         return {
@@ -131,123 +135,116 @@ const UserController = new Elysia({ prefix: "/auth" })
       }),
     }
   )
-  .post("/refresh", async ({ cookie, refreshJwt, accessJwt, error }) => {
-    try {
-      const { refreshToken } = cookie;
+  .post(
+    "/refresh",
+    async ({ cookie: { refreshToken }, refreshJwt, accessJwt, error }) => {
+      try {
+        if (!refreshToken) {
+          return error(400, {
+            success: false,
+            message: "No refresh token provided",
+            error: {
+              code: "MISSING_REFRESH_TOKEN",
+              details: "Refresh token not found",
+            },
+          });
+        }
 
-      if (!refreshToken) {
-        return error(400, {
+        const decoded = await refreshJwt.verify(refreshToken.value);
+        if (!decoded) {
+          return error(401, {
+            success: false,
+            message: "Invalid refresh token",
+            error: {
+              code: "INVALID_REFRESH_TOKEN",
+              details: "Refresh token is invalid",
+            },
+          });
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.id?.toString() },
+        });
+
+        if (!user) {
+          return error(404, {
+            success: false,
+            message: "User not found",
+            error: {
+              code: "USER_NOT_FOUND",
+              details: "User not found",
+            },
+          });
+        }
+
+        // Gunakan transaksi untuk operasi database
+        const [storedToken, newAccessToken, newRefreshToken] =
+          await prisma.$transaction(async (tx) => {
+            const storedToken = await tx.refreshToken.findUnique({
+              where: { token: refreshToken.value },
+            });
+
+            if (!storedToken) {
+              throw new Error("Invalid refresh token");
+            }
+
+            if (new Date() > storedToken.expiresAt) {
+              await tx.refreshToken.delete({
+                where: { token: refreshToken.value },
+              });
+              throw new Error("Refresh token expired");
+            }
+
+            await tx.refreshToken.delete({
+              where: { token: refreshToken.value },
+            });
+
+            const newAccessToken = await accessJwt.sign({
+              id: user.id,
+              email: user.email,
+              name: user.name,
+            });
+
+            const newRefreshToken = await refreshJwt.sign({ id: user.id });
+
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 7);
+
+            await tx.refreshToken.upsert({
+              where: { userId: user.id },
+              update: { token: newRefreshToken, expiresAt },
+              create: { userId: user.id, token: newRefreshToken, expiresAt },
+            });
+
+            return [storedToken, newAccessToken, newRefreshToken];
+          });
+
+        // Set cookie setelah transaksi berhasil
+        refreshToken.set({
+          value: newRefreshToken,
+          httpOnly: true,
+          secure: true,
+          path: "/auth",
+          sameSite: "none",
+        });
+
+        return {
+          success: true,
+          message: "Token refreshed successfully",
+          data: { accessToken: newAccessToken },
+        };
+      } catch (err) {
+        return error(500, {
           success: false,
-          message: "No refresh token provided",
+          message: "Token refresh failed",
           error: {
-            code: "MISSING_REFRESH_TOKEN",
-            details: "Refresh token not found",
+            code: "INTERNAL_ERROR",
+            details: "An unknown error occurred",
           },
         });
       }
-
-      const decoded = await refreshJwt.verify(refreshToken.value);
-      if (!decoded) {
-        return error(401, {
-          success: false,
-          message: "Invalid refresh token",
-          error: {
-            code: "INVALID_REFRESH_TOKEN",
-            details: "Refresh token is invalid",
-          },
-        });
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.id?.toString() },
-      });
-
-      if (!user) {
-        return error(404, {
-          success: false,
-          message: "User not found",
-          error: {
-            code: "USER_NOT_FOUND",
-            details: "User not found",
-          },
-        });
-      }
-
-      const storedToken = await prisma.refreshToken.findUnique({
-        where: { token: refreshToken.value },
-      });
-
-      if (!storedToken) {
-        return error(401, {
-          success: false,
-          message: "Invalid refresh token",
-          error: {
-            code: "INVALID_REFRESH_TOKEN",
-            details: "Refresh token not found in the database",
-          },
-        });
-      }
-
-      if (new Date() > storedToken.expiresAt) {
-        await prisma.refreshToken.delete({
-          where: { token: refreshToken.value },
-        });
-
-        return error(401, {
-          success: false,
-          message: "Refresh token expired, please login again",
-          error: {
-            code: "REFRESH_TOKEN_EXPIRED",
-            details: "Refresh token has expired",
-          },
-        });
-      }
-
-      await prisma.refreshToken.delete({
-        where: { token: refreshToken.value },
-      });
-
-      const newAccessToken = await accessJwt.sign({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      });
-
-      const newRefreshToken = await refreshJwt.sign({ id: user.id });
-
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
-
-      await prisma.refreshToken.upsert({
-        where: { userId: user.id },
-        update: { token: newRefreshToken, expiresAt },
-        create: { userId: user.id, token: newRefreshToken, expiresAt },
-      });
-
-      refreshToken.set({
-        value: newRefreshToken,
-        httpOnly: true,
-        secure: true,
-        sameSite: "strict",
-        path: "/auth",
-      });
-
-      return {
-        success: true,
-        message: "Token refreshed successfully",
-        data: { accessToken: newAccessToken },
-      };
-    } catch (err) {
-      return error(500, {
-        success: false,
-        message: "Token refresh failed",
-        error: {
-          code: "INTERNAL_ERROR",
-          details: "An unknown error occurred",
-        },
-      });
     }
-  })
+  )
   .post("/logout", async ({ cookie: { refreshToken }, error }) => {
     try {
       if (!refreshToken) {

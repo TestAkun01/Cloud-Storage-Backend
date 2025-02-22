@@ -10,6 +10,7 @@
   "dependencies": {
     "@bogeychan/elysia-logger": "^0.1.7",
     "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/html": "^1.2.0",
     "@elysiajs/jwt": "^1.2.0",
     "@elysiajs/swagger": "^1.2.0",
     "@prisma/client": "^6.4.1",
@@ -17,7 +18,7 @@
     "@types/zxcvbn": "^4.4.5",
     "@verrou/core": "^0.5.1",
     "bcrypt": "^5.1.1",
-    "elysia": "^1.2.10",
+    "elysia": "1.2.10",
     "env-var": "^7.5.0",
     "i": "^0.3.7",
     "minio": "^8.0.4",

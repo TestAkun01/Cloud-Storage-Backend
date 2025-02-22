@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloud Storage</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      h1,
+      h2 {
+        color: #333;
+      }
+      form {
+        margin-bottom: 20px;
+      }
+      ul {
+        list-style-type: none;
+        padding: 0;
+      }
+      li {
+        margin: 10px 0;
+      }
+      a {
+        color: #007bff;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Cloud Storage</h1>
+
+    <div id="auth">
+      <h2>Login</h2>
+      <form id="loginForm">
+        <input type="email" id="loginEmail" placeholder="Email" required />
+        <input
+          type="password"
+          id="loginPassword"
+          placeholder="Password"
+          required />
+        <button type="submit">Login</button>
+      </form>
+
+      <h2>Register</h2>
+      <form id="registerForm">
+        <input type="text" id="registerName" placeholder="Name" required />
+        <input type="email" id="registerEmail" placeholder="Email" required />
+        <input
+          type="password"
+          id="registerPassword"
+          placeholder="Password"
+          required />
+        <button type="submit">Register</button>
+      </form>
+    </div>
+
+    <div id="storage" class="hidden">
+      <h1>Upload File</h1>
+      <form id="uploadForm">
+        <input type="file" id="fileInput" required />
+        <input type="text" id="pathInput" />
+        <button type="submit">Upload</button>
+      </form>
+
+      <h2>File List</h2>
+      <div>
+        <button onclick="goToParentFolder()">Up</button>
+        <input type="text" id="searchInput" placeholder="Search files..." />
+        <button onclick="searchFiles()">Search</button>
+      </div>
+      <div id="breadcrumbs"></div>
+      <ul id="fileList"></ul>
+
+      <button id="logoutButton">Logout</button>
+    </div>
+    <button onclick="refreshAccessToken()">Refresh Token</button>
+    <script>
+      const AUTH_API = "https://localhost:3000/auth";
+      const FILE_API = "https://localhost:3000/files";
+
+      let currentPrefix = "";
+
+      function getToken() {
+        return localStorage.getItem("accessToken");
+      }
+
+      function setToken(token) {
+        localStorage.setItem("accessToken", token);
+      }
+
+      function removeToken() {
+        localStorage.removeItem("accessToken");
+      }
+
+      async function refreshAccessToken() {
+        try {
+          const response = await fetch(`${AUTH_API}/refresh`, {
+            method: "POST",
+            credentials: "include",
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to refresh token");
+          }
+
+          const { success, data } = await response.json();
+          if (success) {
+            setToken(data.accessToken);
+            return data.accessToken;
+          }
+        } catch (error) {
+          console.error("Refresh token failed:", error);
+        }
+      }
+
+      async function fetchWithAuth(url, options = {}, retry = true) {
+        const accessToken = getToken();
+        options.headers = {
+          ...options.headers,
+          Authorization: `Bearer ${accessToken}`,
+        };
+
+        try {
+          const response = await fetch(url, options);
+          if (response.status === 401 && retry) {
+            const newToken = await refreshAccessToken();
+            if (!newToken) throw new Error("Token refresh failed");
+
+            options.headers.Authorization = `Bearer ${newToken}`;
+            return fetch(url, options);
+          }
+          return response;
+        } catch (error) {
+          console.error("API request failed:", error);
+        }
+      }
+
+      async function registerUser(event) {
+        event.preventDefault();
+        const name = document.getElementById("registerName").value;
+        const email = document.getElementById("registerEmail").value;
+        const password = document.getElementById("registerPassword").value;
+
+        try {
+          const response = await fetch(`${AUTH_API}/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password }),
+          });
+
+          const result = await response.json();
+          if (!result.success) throw new Error(result.message);
+          alert("Registration successful, please login.");
+        } catch (error) {
+          alert("Error: " + error.message);
+        }
+      }
+
+      async function loginUser(event) {
+        event.preventDefault();
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+
+        try {
+          const response = await fetch(`${AUTH_API}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+
+          const result = await response.json();
+          if (!result.success) throw new Error(result.message);
+
+          setToken(result.data.accessToken);
+          alert("Login successful");
+          showStorage();
+        } catch (error) {
+          alert("Error: " + error.message);
+        }
+      }
+
+      async function fetchFiles(prefix = "") {
+        try {
+          const response = await fetchWithAuth(
+            `${FILE_API}/list?prefix=${prefix}`
+          );
+          if (!response.ok) throw new Error("Failed to fetch files");
+
+          const { success, data } = await response.json();
+          console.log(data);
+
+          if (success) {
+            const fileList = document.getElementById("fileList");
+            const breadcrumbs = document.getElementById("breadcrumbs");
+
+            fileList.innerHTML = "";
+            breadcrumbs.innerHTML = "";
+
+            // Render Breadcrumbs
+            data.breadcrumbs.forEach((crumb, index) => {
+              const span = document.createElement("span");
+              span.textContent = crumb.name;
+              span.style.cursor = "pointer";
+              span.onclick = () => fetchFiles(crumb.path);
+              breadcrumbs.appendChild(span);
+
+              if (index < data.breadcrumbs.length - 1) {
+                breadcrumbs.appendChild(document.createTextNode(" / "));
+              }
+            });
+
+            // Render Folders
+            data.folders.forEach((folder) => {
+              const li = document.createElement("li");
+              li.textContent = `📁 ${folder.name}`;
+              li.style.cursor = "pointer";
+              li.onclick = () => fetchFiles(prefix + folder.name + "/");
+              fileList.appendChild(li);
+            });
+
+            // Render Files
+            data.files.forEach((file) => {
+              const li = document.createElement("li");
+              li.textContent = `📄 ${file.name}`;
+              li.innerHTML += `
+          <button onclick="downloadFile('${file.path}')">Download</button>
+          <button onclick="shareFile('${file.path}')">Share</button>
+          <button onclick="deleteFile('${file.path}')">Delete</button>
+        `;
+              fileList.appendChild(li);
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching files:", error);
+          alert(error.message);
+        }
+      }
+
+      async function uploadFile(event) {
+        event.preventDefault();
+        const fileInput = document.getElementById("fileInput");
+        const pathInput = document.getElementById("pathInput");
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert("Please select a file to upload");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("path", pathInput.value);
+
+        try {
+          const response = await fetchWithAuth(`${FILE_API}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+
+          const result = await response.json();
+          if (!result.success) throw new Error(result.message);
+
+          alert(`File uploaded successfully: ${result.data.name}`);
+          fetchFiles(currentPrefix);
+        } catch (error) {
+          alert("Error uploading file: " + error.message);
+        }
+      }
+
+      async function downloadFile(fileName) {
+        try {
+          const response = await fetchWithAuth(
+            `${FILE_API}/download/${fileName}`
+          );
+
+          if (!response.ok) throw new Error("Failed to download file");
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+
+          window.URL.revokeObjectURL(url);
+        } catch (error) {
+          console.error("Error downloading file:", error);
+          alert(error.message);
+        }
+      }
+      async function deleteFile(fileName) {
+        try {
+          const response = await fetchWithAuth(`${FILE_API}/${fileName}`, {
+            method: "DELETE",
+          });
+
+          if (!response.ok) throw new Error("Failed to delete file");
+
+          const { success, message } = await response.json();
+          if (success) {
+            alert(message);
+            fetchFiles(currentPrefix);
+          }
+        } catch (error) {
+          alert("Error deleting file: " + error.message);
+        }
+      }
+
+      async function shareFile(fileName) {
+        try {
+          const response = await fetchWithAuth(`${FILE_API}/share/${fileName}`);
+
+          if (!response.ok)
+            throw new Error("Failed to generate shareable link");
+
+          const { success, data } = await response.json();
+          if (success) {
+            alert(`Shareable link: ${data.presignedUrl}`);
+          }
+        } catch (error) {
+          console.error("Error sharing file:", error);
+          alert(error.message);
+        }
+      }
+
+      async function searchFiles() {
+        try {
+          const keyword = document.getElementById("searchInput").value;
+          const response = await fetchWithAuth(
+            `${FILE_API}/search?keyword=${keyword}`
+          );
+
+          if (!response.ok) throw new Error("Failed to search files");
+
+          const { success, data } = await response.json();
+          if (success) {
+            const fileList = document.getElementById("fileList");
+            fileList.innerHTML = data
+              .map(
+                (file) => `
+            <li>
+              ${file.name} - 
+              <button onclick="downloadFile('${file.path}')">Download</button>
+              <button onclick="shareFile('${file.path}')">Share</button>
+              <button onclick="deleteFile('${file.path}')">Delete</button>
+            </li>
+          `
+              )
+              .join("");
+          }
+        } catch (error) {
+          console.error("Error searching files:", error);
+          alert(error.message);
+        }
+      }
+
+      function goToParentFolder() {
+        const parentPrefix = currentPrefix.split("/").slice(0, -1).join("/");
+        currentPrefix = parentPrefix;
+        fetchFiles(currentPrefix);
+      }
+
+      async function logoutUser() {
+        try {
+          const response = await fetchWithAuth(`${AUTH_API}/logout`, {
+            method: "POST",
+            credentials: "include",
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to log out");
+          }
+
+          const { success, message } = await response.json();
+          if (success) {
+            removeToken();
+            alert(message);
+            showAuth();
+          } else {
+            throw new Error(message);
+          }
+        } catch (error) {
+          console.error("Logout failed:", error);
+          alert("Logout failed. Please try again.");
+        }
+      }
+
+      function showAuth() {
+        document.getElementById("auth").classList.remove("hidden");
+        document.getElementById("storage").classList.add("hidden");
+      }
+
+      function showStorage() {
+        document.getElementById("auth").classList.add("hidden");
+        document.getElementById("storage").classList.remove("hidden");
+        fetchFiles(currentPrefix);
+      }
+
+      document
+        .getElementById("registerForm")
+        .addEventListener("submit", registerUser);
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", loginUser);
+      document
+        .getElementById("uploadForm")
+        .addEventListener("submit", uploadFile);
+      document
+        .getElementById("logoutButton")
+        .addEventListener("click", logoutUser);
+
+      if (getToken()) {
+        showStorage();
+      } else {
+        showAuth();
+      }
+    </script>
+  </body>
+</html>
