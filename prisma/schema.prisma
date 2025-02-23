@@ -38,15 +38,24 @@ model RefreshToken {
 }
 
 model File {
-  id          Int      @id @default(autoincrement())
+   id         String   @id @default(uuid()) 
   userId      String   
   name        String
+  description String?
   size        Int
   type        String
   bucket      String
+  metadata    Json?
   path        String   @unique  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  tags        Tag[]
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Tag {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  files   File[]
 }

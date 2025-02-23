@@ -1,5 +1,6 @@
 import { Verrou } from "@verrou/core";
 import { memoryStore } from "@verrou/core/drivers/memory";
+import {} from "@verrou/core/drivers/database";
 import { config } from "../config.ts";
 
 export const verrou = new Verrou({

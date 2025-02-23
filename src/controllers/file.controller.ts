@@ -5,7 +5,7 @@ import JwtPlugin from "../plugins/jwt";
 import { BucketItem } from "minio";
 import { config } from "../config";
 
-const FileController = new Elysia({ prefix: "/files" })
+const FileController = new Elysia({ prefix: "/objects" })
   .use(JwtPlugin)
   .derive(async ({ headers, accessJwt, error }) => {
     const token = headers["authorization"]?.split(" ")[1];
@@ -50,6 +50,74 @@ const FileController = new Elysia({ prefix: "/files" })
       });
     }
   })
+  .put(
+    "/update/*",
+    async ({ params, body, user, error }) => {
+      try {
+        const path = decodeURI(params["*"]);
+        const { name, description, tags } = body;
+
+        const file = await prisma.file.findUnique({
+          where: { path, userId: user.id!.toString() },
+          include: { tags: true },
+        });
+
+        if (!file) {
+          return error(404, {
+            success: false,
+            message: "File not found",
+            error: {
+              code: "FILE_NOT_FOUND",
+              details: "The requested file does not exist",
+            },
+          });
+        }
+
+        const updatedFile = await prisma.file.update({
+          where: { path },
+          data: {
+            name: name || file.name,
+            description: description || file.description,
+            tags: {
+              set: [],
+
+              connectOrCreate: tags?.map((tagName) => ({
+                where: { name: tagName },
+                create: { name: tagName },
+              })),
+            },
+          },
+          include: { tags: true },
+        });
+
+        return {
+          success: true,
+          message: "File metadata updated successfully",
+          data: updatedFile,
+        };
+      } catch (err) {
+        console.error(err);
+        return error(500, {
+          success: false,
+          message: "Failed to update file metadata",
+          error: {
+            code: "UPDATE_FAILED",
+            details: "An error occurred while updating the file metadata",
+          },
+        });
+      }
+    },
+    {
+      body: t.Object({
+        name: t.Optional(t.String()),
+        description: t.Optional(t.String()),
+        tags: t.Optional(t.Array(t.String())),
+      }),
+      params: t.Object({
+        "*": t.String(),
+      }),
+    }
+  )
   .post(
     "/upload",
     async ({ body, user, error }) => {
@@ -86,7 +154,13 @@ const FileController = new Elysia({ prefix: "/files" })
         }
 
         const fileBuffer = Buffer.from(await file.arrayBuffer());
+
         await minioClient.putObject(bucket, fullPath, fileBuffer);
+
+        const metadata = {
+          lastModified: file.lastModified,
+          lastModifiedDate: new Date(file.lastModified).toISOString(),
+        };
 
         const savedFile = await prisma.file.create({
           data: {
@@ -96,6 +170,7 @@ const FileController = new Elysia({ prefix: "/files" })
             type: file.type,
             bucket,
             path: fullPath,
+            metadata: metadata,
           },
         });
 
@@ -334,6 +409,173 @@ const FileController = new Elysia({ prefix: "/files" })
           error: {
             code: "SHARE_ERROR",
             details: "An error occurred while generating the shareable link",
+          },
+        });
+      }
+    },
+    {
+      params: t.Object({
+        "*": t.String(),
+      }),
+    }
+  )
+  .put(
+    "/move/*",
+    async ({ params, body, user, error }) => {
+      try {
+        const path = decodeURI(params["*"]);
+        const { newPath, newName } = body;
+
+        const file = await prisma.file.findUnique({
+          where: { path, userId: user.id!.toString() },
+        });
+
+        if (!file) {
+          return error(404, {
+            success: false,
+            message: "File not found",
+            error: {
+              code: "FILE_NOT_FOUND",
+              details: "The requested file does not exist",
+            },
+          });
+        }
+
+        const newFullPath = `${user.id}/${newPath}${newPath ? "/" : ""}${
+          newName || file.name
+        }`;
+
+        await minioClient.copyObject(
+          config.MINIO_BUCKET_NAME,
+          newFullPath,
+          `${config.MINIO_BUCKET_NAME}/${path}`
+        );
+        await minioClient.removeObject(config.MINIO_BUCKET_NAME, path);
+
+        const updatedFile = await prisma.file.update({
+          where: { path },
+          data: {
+            path: newFullPath,
+            name: newName || file.name,
+          },
+        });
+
+        return {
+          success: true,
+          message: "File moved/renamed successfully",
+          data: updatedFile,
+        };
+      } catch (err) {
+        console.error(err);
+        return error(500, {
+          success: false,
+          message: "Failed to move/rename file",
+          error: {
+            code: "MOVE_FAILED",
+            details: "An error occurred while moving/renaming the file",
+          },
+        });
+      }
+    },
+    {
+      body: t.Object({
+        newPath: t.String(),
+        newName: t.Optional(t.String()),
+      }),
+      params: t.Object({
+        "*": t.String(),
+      }),
+    }
+  )
+  .post(
+    "/folder/create",
+    async ({ body, user, error }) => {
+      try {
+        const { folderName, path } = body;
+        const fullPath = `${user.id}/${path}${path ? "/" : ""}${folderName}/`;
+
+        // Cek apakah folder sudah ada
+        try {
+          await minioClient.statObject(config.MINIO_BUCKET_NAME, fullPath);
+          return error(400, {
+            success: false,
+            message: "Folder already exists",
+            error: {
+              code: "FOLDER_EXISTS",
+              details: "The folder already exists",
+            },
+          });
+        } catch {
+          // Folder tidak ada, lanjutkan membuat folder
+        }
+
+        // Buat folder di MinIO
+        await minioClient.putObject(
+          config.MINIO_BUCKET_NAME,
+          fullPath,
+          Buffer.from("")
+        );
+
+        return {
+          success: true,
+          message: "Folder created successfully",
+          data: { path: fullPath },
+        };
+      } catch (err) {
+        console.error(err);
+        return error(500, {
+          success: false,
+          message: "Failed to create folder",
+          error: {
+            code: "CREATE_FAILED",
+            details: "An error occurred while creating the folder",
+          },
+        });
+      }
+    },
+    {
+      body: t.Object({
+        folderName: t.String(),
+        path: t.Optional(t.String()),
+      }),
+    }
+  )
+  .delete(
+    "/folder/delete/*",
+    async ({ params, user, error }) => {
+      try {
+        const path = decodeURI(params["*"]);
+        const fullPath = `${user.id}/${path}`;
+
+        // Cek apakah folder ada
+        try {
+          await minioClient.statObject(config.MINIO_BUCKET_NAME, fullPath);
+        } catch {
+          return error(404, {
+            success: false,
+            message: "Folder not found",
+            error: {
+              code: "FOLDER_NOT_FOUND",
+              details: "The requested folder does not exist",
+            },
+          });
+        }
+
+        // Hapus folder di MinIO
+        await minioClient.removeObject(config.MINIO_BUCKET_NAME, fullPath);
+
+        return {
+          success: true,
+          message: "Folder deleted successfully",
+        };
+      } catch (err) {
+        console.error(err);
+        return error(500, {
+          success: false,
+          message: "Failed to delete folder",
+          error: {
+            code: "DELETE_FAILED",
+            details: "An error occurred while deleting the folder",
           },
         });
       }

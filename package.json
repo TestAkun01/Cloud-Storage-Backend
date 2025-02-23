@@ -5,7 +5,9 @@
     "dev": "bun --watch src/index.ts",
     "start": "NODE_ENV=production bun run ./src/index.ts",
     "lint": "bun x eslint \"src/**/*.ts\"",
-    "lint:fix": "bun x eslint \"src/**/*.ts\" --fix"
+    "lint:fix": "bun x eslint \"src/**/*.ts\" --fix",
+    "studio": "bunx prisma studio",
+    "migrate": "bunx prisma migrate dev"
   },
   "dependencies": {
     "@bogeychan/elysia-logger": "^0.1.7",
