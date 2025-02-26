@@ -2,14 +2,16 @@ import { logger } from "@bogeychan/elysia-logger";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { Elysia, t } from "elysia";
-import FileController from "./controllers/file.controller.ts";
-import UserController from "./controllers/auth.controller.ts";
+import { UserController } from "./controllers/user.controller.ts";
 import html from "@elysiajs/html";
+import { TagController } from "./controllers/tag.controller.ts";
+import { AuthController } from "./controllers/auth.controller.ts";
+import { ObjectController } from "./controllers/object.controller.ts";
 
 export const app = new Elysia()
   .use(
     logger({
-      level: "error",
+      level: "info",
     })
   )
   .use(html())
@@ -18,19 +20,13 @@ export const app = new Elysia()
     cors({
       credentials: true,
       origin: "https://localhost:5173",
-      methods: ["GET", "POST", "DELETE"],
+      methods: ["GET", "POST", "DELETE", "PUT"],
     })
   )
-  .get("/", () => {
-    return Bun.file("src/index.html");
-  })
-  .get("/test/:test", ({ params }) => {
-    return params;
-  })
-  .get("/test/*", ({ params }) => {
-    return params;
-  })
+  .use(ObjectController)
   .use(UserController)
-  .use(FileController);
+  .use(TagController)
+  .use(AuthController)
+  .get("/*", () => ({}));
 
 export type App = typeof app;

@@ -1,10 +1,10 @@
 import { Elysia, t } from "elysia";
 import bcrypt from "bcrypt";
 import zxcvbn from "zxcvbn";
-import JwtPlugin from "../plugins/jwt";
+import JwtPlugin from "../plugins/jwt.plugin";
 import { prisma } from "../db";
 
-const UserController = new Elysia({ prefix: "/auth" })
+export const AuthController = new Elysia({ prefix: "/auth" })
   .use(JwtPlugin)
   .post(
     "/register",
@@ -94,16 +94,14 @@ const UserController = new Elysia({ prefix: "/auth" })
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
-        // Gunakan transaksi untuk operasi database
         await prisma.$transaction(async (tx) => {
           await tx.refreshToken.upsert({
-            where: { userId: user.id },
+            where: { userId: user.id?.toString() },
             update: { token: refreshToken, expiresAt },
             create: { userId: user.id, token: refreshToken, expiresAt },
           });
         });
 
-        // Set cookie setelah transaksi berhasil
         cookie.refreshToken?.set({
           value: refreshToken,
           httpOnly: true,
@@ -177,7 +175,6 @@ const UserController = new Elysia({ prefix: "/auth" })
           });
         }
 
-        // Gunakan transaksi untuk operasi database
         const [storedToken, newAccessToken, newRefreshToken] =
           await prisma.$transaction(async (tx) => {
             const storedToken = await tx.refreshToken.findUnique({
@@ -219,7 +216,6 @@ const UserController = new Elysia({ prefix: "/auth" })
             return [storedToken, newAccessToken, newRefreshToken];
           });
 
-        // Set cookie setelah transaksi berhasil
         refreshToken.set({
           value: newRefreshToken,
           httpOnly: true,
@@ -276,5 +272,3 @@ const UserController = new Elysia({ prefix: "/auth" })
       });
     }
   });
-
-export default UserController;
