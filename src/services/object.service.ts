@@ -135,39 +135,43 @@ export const ObjectService = {
     const objects = await prisma.storageObject.findMany({
       where: {
         userId,
-        OR: [
-          { prefix: { startsWith: normalizedPrefix } },
-          { prefix: normalizedPrefix },
-        ],
+        prefix: normalizedPrefix,
       },
     });
 
-    const folders = new Set<string>();
-    const files: Prisma.StorageObjectGetPayload<{}>[] = [];
+    const subfolders = await prisma.storageObject.findMany({
+      where: {
+        userId,
+        prefix: {
+          startsWith: normalizedPrefix,
+          not: normalizedPrefix,
+        },
+        isFolder: true,
+      },
+      select: {
+        prefix: true,
+      },
+      distinct: ["prefix"],
+    });
 
-    for (const obj of objects) {
-      const relativePath = obj.prefix
+    const folders = subfolders.map((subfolder) => {
+      const folderName = subfolder.prefix
         .replace(normalizedPrefix, "")
         .split("/")
-        .filter(Boolean);
+        .filter(Boolean)[0];
+      return folderName;
+    });
 
-      if (relativePath.length > 0) {
-        folders.add(relativePath[0] ?? "");
-      }
-
-      if (obj.prefix === normalizedPrefix) {
-        files.push(obj);
-      }
-    }
+    const uniqueFolders = [...new Set(folders)];
 
     const breadcrumbs = prefix === "/" ? [] : prefix.split("/").filter(Boolean);
 
     return {
-      folders: Array.from(folders).map((folder) => ({
+      folders: uniqueFolders.map((folder) => ({
         type: "folder",
         name: folder,
       })),
-      files,
+      files: objects.filter((obj) => !obj.isFolder),
       breadcrumbs,
     };
   },

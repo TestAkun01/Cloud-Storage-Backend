@@ -9,13 +9,12 @@ export const FolderController = new Elysia({ prefix: "/folders" })
     "/create",
     async ({ body, user, error }) => {
       try {
-        const { folderName, prefix = "/" } = body;
-        await FolderService.createFolder(
+        const { prefix = "/" } = body;
+        const data = await FolderService.createFolder(
           user.id!.toString(),
-          folderName,
           prefix
         );
-        return { success: true, message: "Folder created successfully" };
+        return { success: true, message: "Folder created successfully", data };
       } catch (err) {
         if (err instanceof CustomError) {
           return error(err.statusCode, {
@@ -36,18 +35,20 @@ export const FolderController = new Elysia({ prefix: "/folders" })
     },
     {
       body: t.Object({
-        folderName: t.String(),
-        prefix: t.Optional(t.String({ default: "/" })),
+        prefix: t.String({ default: "/" }),
       }),
     }
   )
   .delete(
-    "/delete/:folderId",
-    async ({ params, user, error }) => {
+    "/delete",
+    async ({ body, user, error }) => {
       try {
-        const { folderId } = params;
-        await FolderService.deleteFolder(user.id!.toString(), folderId);
-        return { success: true, message: "Folder deleted successfully" };
+        const { prefix } = body;
+        const data = await FolderService.deleteFolder(
+          user.id!.toString(),
+          prefix
+        );
+        return { success: true, message: "Folder deleted successfully", data };
       } catch (err) {
         if (err instanceof CustomError) {
           return error(err.statusCode, {
@@ -67,21 +68,20 @@ export const FolderController = new Elysia({ prefix: "/folders" })
       }
     },
     {
-      params: t.Object({ folderId: t.String() }),
+      body: t.Object({ prefix: t.String() }),
     }
   )
   .put(
-    "/rename-folder/:folderId",
-    async ({ params, body, user, error }) => {
+    "/rename-folder",
+    async ({ body, user, error }) => {
       try {
-        const { folderId } = params;
-        const { newName } = body;
-        await FolderService.renameFolder(
+        const { newName, prefix } = body;
+        const data = await FolderService.renameFolder(
           user.id!.toString(),
-          folderId,
+          prefix,
           newName
         );
-        return { success: true, message: "Folder renamed successfully" };
+        return { success: true, message: "Folder renamed successfully", data };
       } catch (err) {
         if (err instanceof CustomError) {
           return error(err.statusCode, {
@@ -101,7 +101,6 @@ export const FolderController = new Elysia({ prefix: "/folders" })
       }
     },
     {
-      params: t.Object({ folderId: t.String() }),
-      body: t.Object({ newName: t.String() }),
+      body: t.Object({ newName: t.String(), prefix: t.String() }),
     }
   );
