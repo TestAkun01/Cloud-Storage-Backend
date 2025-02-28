@@ -1,4 +1,4 @@
-import { t } from "elysia";
+import { t } from "elysia"
 
 export const ResponseSchema = t.Object({
   success: t.Boolean(),
@@ -8,6 +8,6 @@ export const ResponseSchema = t.Object({
     t.Object({
       code: t.String(),
       details: t.String(),
-    })
+    }),
   ),
-});
+})

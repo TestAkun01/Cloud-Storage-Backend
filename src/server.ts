@@ -1,17 +1,40 @@
-import { logger } from "@bogeychan/elysia-logger";
+import { fileLogger, logger } from "@bogeychan/elysia-logger";
 import { cors } from "@elysiajs/cors";
-import { swagger } from "@elysiajs/swagger";
-import { Elysia, t } from "elysia";
-import { UserController } from "./controllers/user.controller.ts";
 import html from "@elysiajs/html";
-import { TagController } from "./controllers/tag.controller.ts";
+import { swagger } from "@elysiajs/swagger";
+import { Elysia } from "elysia";
+import { ActivityController } from "./controllers/activity.controller.ts";
 import { AuthController } from "./controllers/auth.controller.ts";
+import { FolderController } from "./controllers/folder.controller.ts";
 import { ObjectController } from "./controllers/object.controller.ts";
+import { QuotaController } from "./controllers/quota.controller.ts";
+import { SearchController } from "./controllers/search.controller.ts";
+import { ShareController } from "./controllers/share.controller.ts";
+import { TagController } from "./controllers/tag.controller.ts";
+import { UserController } from "./controllers/user.controller.ts";
+import { VersionController } from "./controllers/version.controller.ts";
+import { config } from "./config";
 
-export const app = new Elysia()
+export const app = new Elysia({
+  serve: {
+    port: config.PORT,
+    hostname: config.HOSTNAME,
+    tls: config.SSL_ENABLED
+      ? {
+          cert: Bun.file(config.SSL_CERT_PATH),
+          key: Bun.file(config.SSL_KEY_PATH),
+        }
+      : undefined,
+  },
+})
   .use(
     logger({
       level: "info",
+    })
+  )
+  .use(
+    fileLogger({
+      file: "./my.log",
     })
   )
   .use(html())
@@ -23,10 +46,18 @@ export const app = new Elysia()
       methods: ["GET", "POST", "DELETE", "PUT"],
     })
   )
-  .use(ObjectController)
-  .use(UserController)
-  .use(TagController)
   .use(AuthController)
-  .get("/*", () => ({}));
+  .use(ActivityController)
+  .use(UserController)
+  .use(ObjectController)
+  .use(TagController)
+  .use(FolderController)
+  .use(QuotaController)
+  .use(SearchController)
+  .use(ShareController)
+  .use(VersionController)
+  .get("/", () => {
+    console.log(config.API_URL);
+  });
 
 export type App = typeof app;

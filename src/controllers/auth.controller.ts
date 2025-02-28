@@ -1,8 +1,12 @@
 import { Elysia, t } from "elysia";
-import bcrypt from "bcrypt";
-import zxcvbn from "zxcvbn";
 import JwtPlugin from "../plugins/jwt.plugin";
-import { prisma } from "../db";
+import {
+  loginUser,
+  refreshAccessToken,
+  registerUser,
+  logoutUser,
+} from "../services/auth.service";
+import { CustomError } from "../errors/custom.error";
 
 export const AuthController = new Elysia({ prefix: "/auth" })
   .use(JwtPlugin)
@@ -10,57 +14,28 @@ export const AuthController = new Elysia({ prefix: "/auth" })
     "/register",
     async ({ body, error }) => {
       try {
-        if (zxcvbn(body.password).score < 2) {
-          return error(400, {
-            success: false,
-            message: "Password is too weak, please use a stronger one",
-            error: {
-              code: "WEAK_PASSWORD",
-              details: "Password does not meet security requirements",
-            },
-          });
-        }
-
-        const hashedPassword = await bcrypt.hash(body.password, 10);
-        const user = await prisma.user.create({
-          data: {
-            email: body.email,
-            password: hashedPassword,
-            name: body.name,
-          },
-        });
-
-        return {
-          success: true,
-          message: "User registered successfully",
-          data: { userId: user.id },
-        };
+        const user = await registerUser(body.email, body.password, body.name);
+        return { success: true, data: { userId: user.id } };
       } catch (err) {
-        if (err instanceof Error) {
-          return error(500, {
+        if (err instanceof CustomError) {
+          return error(err.statusCode, {
             success: false,
-            message: "Registration failed",
-            error: {
-              code: "INTERNAL_ERROR",
-              details: err.message,
-            },
+            message: err.message,
+            error: { code: err.code, details: err.details },
           });
         }
         return error(500, {
           success: false,
           message: "Registration failed",
-          error: {
-            code: "INTERNAL_ERROR",
-            details: "An unknown error occurred",
-          },
+          error: { code: "REGISTER_FAILED", details: "Internal server error" },
         });
       }
     },
     {
       body: t.Object({
         email: t.String({ format: "email" }),
-        password: t.String(),
-        name: t.String(),
+        password: t.String({ minLength: 8 }),
+        name: t.String({ minLength: 2 }),
       }),
     }
   )
@@ -68,39 +43,12 @@ export const AuthController = new Elysia({ prefix: "/auth" })
     "/login",
     async ({ body, accessJwt, refreshJwt, cookie, error }) => {
       try {
-        const user = await prisma.user.findUnique({
-          where: { email: body.email },
-        });
-
-        if (!user || !(await bcrypt.compare(body.password, user.password))) {
-          return error(401, {
-            success: false,
-            message: "Invalid credentials",
-            error: {
-              code: "INVALID_CREDENTIALS",
-              details: "Email or password is incorrect",
-            },
-          });
-        }
-
-        const accessToken = await accessJwt.sign({
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        });
-
-        const refreshToken = await refreshJwt.sign({ id: user.id });
-
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-
-        await prisma.$transaction(async (tx) => {
-          await tx.refreshToken.upsert({
-            where: { userId: user.id?.toString() },
-            update: { token: refreshToken, expiresAt },
-            create: { userId: user.id, token: refreshToken, expiresAt },
-          });
-        });
+        const { accessToken, refreshToken } = await loginUser(
+          body.email,
+          body.password,
+          accessJwt,
+          refreshJwt
+        );
 
         cookie.refreshToken?.set({
           value: refreshToken,
@@ -108,21 +56,22 @@ export const AuthController = new Elysia({ prefix: "/auth" })
           secure: true,
           path: "/auth",
           sameSite: "none",
+          maxAge: 7 * 86400, // 7 days in seconds
         });
 
-        return {
-          success: true,
-          message: "Login successful",
-          data: { accessToken },
-        };
+        return { success: true, data: { accessToken } };
       } catch (err) {
+        if (err instanceof CustomError) {
+          return error(err.statusCode, {
+            success: false,
+            message: err.message,
+            error: { code: err.code, details: err.details },
+          });
+        }
         return error(500, {
           success: false,
           message: "Login failed",
-          error: {
-            code: "INTERNAL_ERROR",
-            details: "An unknown error occurred",
-          },
+          error: { code: "LOGIN_FAILED", details: "Internal server error" },
         });
       }
     },
@@ -137,84 +86,15 @@ export const AuthController = new Elysia({ prefix: "/auth" })
     "/refresh",
     async ({ cookie: { refreshToken }, refreshJwt, accessJwt, error }) => {
       try {
-        if (!refreshToken) {
-          return error(400, {
-            success: false,
-            message: "No refresh token provided",
-            error: {
-              code: "MISSING_REFRESH_TOKEN",
-              details: "Refresh token not found",
-            },
-          });
+        if (!refreshToken?.value) {
+          throw new CustomError("No refresh token", "TOKEN_MISSING", 400);
         }
 
-        const decoded = await refreshJwt.verify(refreshToken.value);
-        if (!decoded) {
-          return error(401, {
-            success: false,
-            message: "Invalid refresh token",
-            error: {
-              code: "INVALID_REFRESH_TOKEN",
-              details: "Refresh token is invalid",
-            },
-          });
-        }
-
-        const user = await prisma.user.findUnique({
-          where: { id: decoded.id?.toString() },
-        });
-
-        if (!user) {
-          return error(404, {
-            success: false,
-            message: "User not found",
-            error: {
-              code: "USER_NOT_FOUND",
-              details: "User not found",
-            },
-          });
-        }
-
-        const [storedToken, newAccessToken, newRefreshToken] =
-          await prisma.$transaction(async (tx) => {
-            const storedToken = await tx.refreshToken.findUnique({
-              where: { token: refreshToken.value },
-            });
-
-            if (!storedToken) {
-              throw new Error("Invalid refresh token");
-            }
-
-            if (new Date() > storedToken.expiresAt) {
-              await tx.refreshToken.delete({
-                where: { token: refreshToken.value },
-              });
-              throw new Error("Refresh token expired");
-            }
-
-            await tx.refreshToken.delete({
-              where: { token: refreshToken.value },
-            });
-
-            const newAccessToken = await accessJwt.sign({
-              id: user.id,
-              email: user.email,
-              name: user.name,
-            });
-
-            const newRefreshToken = await refreshJwt.sign({ id: user.id });
-
-            const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + 7);
-
-            await tx.refreshToken.upsert({
-              where: { userId: user.id },
-              update: { token: newRefreshToken, expiresAt },
-              create: { userId: user.id, token: newRefreshToken, expiresAt },
-            });
-
-            return [storedToken, newAccessToken, newRefreshToken];
-          });
+        const { newAccessToken, newRefreshToken } = await refreshAccessToken(
+          refreshToken.value,
+          refreshJwt,
+          accessJwt
+        );
 
         refreshToken.set({
           value: newRefreshToken,
@@ -222,53 +102,48 @@ export const AuthController = new Elysia({ prefix: "/auth" })
           secure: true,
           path: "/auth",
           sameSite: "none",
+          maxAge: 7 * 86400, // 7 days in seconds
         });
 
-        return {
-          success: true,
-          message: "Token refreshed successfully",
-          data: { accessToken: newAccessToken },
-        };
+        return { success: true, data: { accessToken: newAccessToken } };
       } catch (err) {
+        if (err instanceof CustomError) {
+          return error(err.statusCode, {
+            success: false,
+            message: err.message,
+            error: { code: err.code, details: err.details },
+          });
+        }
         return error(500, {
           success: false,
           message: "Token refresh failed",
-          error: {
-            code: "INTERNAL_ERROR",
-            details: "An unknown error occurred",
-          },
+          error: { code: "REFRESH_FAILED", details: "Internal server error" },
         });
       }
     }
   )
   .post("/logout", async ({ cookie: { refreshToken }, error }) => {
     try {
-      if (!refreshToken) {
-        return error(401, {
-          success: false,
-          message: "Refresh token not found",
-          error: {
-            code: "MISSING_REFRESH_TOKEN",
-            details: "Refresh token not found",
-          },
-        });
+      if (!refreshToken?.value) {
+        throw new CustomError("No refresh token", "TOKEN_MISSING", 400);
       }
 
-      await prisma.refreshToken.delete({
-        where: { token: refreshToken.value },
-      });
+      await logoutUser(refreshToken.value);
 
       refreshToken.remove();
-
-      return { success: true, message: "Logged out successfully" };
+      return { success: true, message: "Logged out" };
     } catch (err) {
+      if (err instanceof CustomError) {
+        return error(err.statusCode, {
+          success: false,
+          message: err.message,
+          error: { code: err.code, details: err.details },
+        });
+      }
       return error(500, {
         success: false,
         message: "Logout failed",
-        error: {
-          code: "INTERNAL_ERROR",
-          details: "An unknown error occurred",
-        },
+        error: { code: "LOGOUT_FAILED", details: "Internal server error" },
       });
     }
   });

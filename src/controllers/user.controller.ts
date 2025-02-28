@@ -1,42 +1,31 @@
 import Elysia, { t } from "elysia";
+import { UserService } from "../services/user.service";
 import { AuthMiddleware } from "../middlewares/auth.middleware";
-import { prisma } from "../db";
-import { hash } from "bcrypt";
+import { CustomError } from "../errors/custom.error";
 
 export const UserController = new Elysia({ prefix: "/users" })
   .use(AuthMiddleware)
   .get("/me", async ({ user, error }) => {
     try {
-      const userData = await prisma.user.findUnique({
-        where: { id: user.id?.toString() },
-        select: { id: true, email: true, name: true, createdAt: true },
-      });
-
-      if (!userData) {
-        return error(404, {
-          success: false,
-          message: "User not found",
-          error: {
-            code: "USER_NOT_FOUND",
-            details: "The requested user does not exist",
-          },
-        });
-      }
-
+      const userId = user.id!.toString();
+      const userData = await UserService.fetchUserById(userId);
       return {
         success: true,
         message: "User data fetched successfully",
         data: userData,
       };
     } catch (err) {
-      console.error(err);
+      if (err instanceof CustomError) {
+        return error(err.statusCode, {
+          success: false,
+          message: err.message,
+          error: { code: err.code, details: err.details },
+        });
+      }
       return error(500, {
         success: false,
         message: "Failed to fetch user data",
-        error: {
-          code: "FETCH_FAILED",
-          details: "An error occurred while fetching user data",
-        },
+        error: { code: "FETCH_FAILED", details: "Internal server error" },
       });
     }
   })
@@ -44,31 +33,30 @@ export const UserController = new Elysia({ prefix: "/users" })
     "/me",
     async ({ body, user, error }) => {
       try {
+        const userId = user.id!.toString();
         const { name, email, password } = body;
-
-        const updatedUser = await prisma.user.update({
-          where: { id: user.id?.toString() },
-          data: {
-            name: name || undefined,
-            email: email || undefined,
-            password: password ? await hash(password, 10) : undefined,
-          },
+        const updatedUser = await UserService.updateUser(userId, {
+          name,
+          email,
+          password,
         });
-
         return {
           success: true,
           message: "User updated successfully",
           data: updatedUser,
         };
       } catch (err) {
-        console.error(err);
+        if (err instanceof CustomError) {
+          return error(err.statusCode, {
+            success: false,
+            message: err.message,
+            error: { code: err.code, details: err.details },
+          });
+        }
         return error(500, {
           success: false,
           message: "Failed to update user",
-          error: {
-            code: "UPDATE_FAILED",
-            details: "An error occurred while updating the user",
-          },
+          error: { code: "UPDATE_FAILED", details: "Internal server error" },
         });
       }
     },
@@ -82,17 +70,21 @@ export const UserController = new Elysia({ prefix: "/users" })
   )
   .delete("/me", async ({ user, error }) => {
     try {
-      await prisma.user.delete({ where: { id: user.id?.toString() } });
+      const userId = user.id!.toString();
+      await UserService.deleteUser(userId);
       return { success: true, message: "User deleted successfully" };
     } catch (err) {
-      console.error(err);
+      if (err instanceof CustomError) {
+        return error(err.statusCode, {
+          success: false,
+          message: err.message,
+          error: { code: err.code, details: err.details },
+        });
+      }
       return error(500, {
         success: false,
         message: "Failed to delete user",
-        error: {
-          code: "DELETE_FAILED",
-          details: "An error occurred while deleting the user",
-        },
+        error: { code: "DELETE_FAILED", details: "Internal server error" },
       });
     }
   });

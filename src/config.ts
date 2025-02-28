@@ -8,11 +8,14 @@ export const config = {
     .asEnum(["production", "test", "development"]),
 
   // Server
-  API_URL: env
-    .get("API_URL")
-    .default(`https://${env.get("PUBLIC_DOMAIN").asString()}`)
-    .asString(),
+  API_URL: env.get("API_URL").required().asString(),
+  HOSTNAME: env.get("HOSTNAME").default("localhost").asString(),
   PORT: env.get("PORT").default(3000).asPortNumber(),
+
+  // SSL Configuration
+  SSL_ENABLED: env.get("SSL_ENABLED").default("false").asBool(),
+  SSL_CERT_PATH: env.get("SSL_CERT_PATH").required().asString(),
+  SSL_KEY_PATH: env.get("SSL_KEY_PATH").required().asString(),
 
   // Verrou
   LOCK_STORE: env.get("LOCK_STORE").default("memory").asEnum(["memory"]),

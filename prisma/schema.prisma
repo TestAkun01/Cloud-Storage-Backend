@@ -16,8 +16,25 @@ model User {
   updatedAt    DateTime       @updatedAt
   refreshTokens RefreshToken[]
   objects      StorageObject[]
+  sharedFiles   SharedFile[] @relation("SharedByUser") 
+  receivedFiles SharedFile[] @relation("SharedWithUser")
+  activityLogs ActivityLog[]
+  userQuotas       UserQuota[]
 
-  @@map("users") 
+  @@map("users")
+}
+
+model UserQuota {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  storageLimit BigInt // Batas penyimpanan dalam bytes
+  storageUsed BigInt // Penyimpanan yang sudah digunakan dalam bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_quotas")
 }
 
 model RefreshToken {
@@ -30,30 +47,68 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@map("refresh_tokens") 
+  @@map("refresh_tokens")
 }
 
 model StorageObject {
-  id          String      @id @default(uuid())
-  userId      String
-  name        String
-  prefix      String
-  description String?
-  size        Int
-  type        String
-  bucket      String
-  metadata    Json?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                 String           @id @default(uuid())
+  userId             String
+  name               String
+  prefix             String
+  description        String?
+  size               Int
+  type              String
+  bucket            String
+  metadata          Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  isFolder          Boolean           @default(false)
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  objectTags  ObjectTag[]
+  previousVersionId String?
+  previousVersion   StorageObject?    @relation("VersionHistory", fields: [previousVersionId], references: [id])
+  versions          StorageObject[]   @relation("VersionHistory")
 
-  accessLink  AccessLink[]
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  objectTags       ObjectTag[]
+  accessLink       AccessLink[]
+  sharedFiles      SharedFile[]
+  activityLogs     ActivityLog[]
 
   @@index([userId, prefix])
   @@index([userId, id])
-  @@map("storage_objects") 
+  @@map("storage_objects")
+}
+
+
+model SharedFile {
+  id              String   @id @default(uuid())
+  objectId        String
+  userId          String 
+  sharedWithUserId String
+  createdAt       DateTime @default(now())
+
+  object    StorageObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  sharedBy  User          @relation(fields: [userId], references: [id], onDelete: Cascade, name: "SharedByUser")
+  sharedWith User         @relation(fields: [sharedWithUserId], references: [id], onDelete: Cascade, name: "SharedWithUser")
+
+  @@index([objectId, sharedWithUserId])
+  @@map("shared_files")
+}
+
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  objectId  String?
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  object    StorageObject? @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, objectId])
+  @@map("activity_logs")
 }
 
 model Tag {
@@ -61,7 +116,7 @@ model Tag {
   name       String      @unique
   objectTags ObjectTag[]
 
-  @@map("tags") 
+  @@map("tags")
 }
 
 model ObjectTag {
@@ -72,7 +127,7 @@ model ObjectTag {
   tag    Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([objectId, tagId])
-  @@map("object_tags") 
+  @@map("object_tags")
 }
 
 model AccessLink {
