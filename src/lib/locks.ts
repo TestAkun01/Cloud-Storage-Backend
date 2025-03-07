@@ -1,5 +1,4 @@
 import { Verrou } from "@verrou/core"
-import {} from "@verrou/core/drivers/database"
 import { memoryStore } from "@verrou/core/drivers/memory"
 import { config } from "../config.ts"
 

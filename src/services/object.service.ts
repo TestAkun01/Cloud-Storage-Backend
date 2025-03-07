@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "../db";
+import { prisma, Prisma } from "../db";
 import minioClient from "../lib/minio";
 import { config } from "../config";
 import { CustomError } from "../errors/custom.error";
@@ -135,34 +134,28 @@ export const ObjectService = {
     const objects = await prisma.storageObject.findMany({
       where: {
         userId,
-        prefix: normalizedPrefix,
-      },
-    });
-
-    const subfolders = await prisma.storageObject.findMany({
-      where: {
-        userId,
         prefix: {
           startsWith: normalizedPrefix,
-          not: normalizedPrefix,
         },
-        isFolder: true,
       },
-      select: {
-        prefix: true,
-      },
-      distinct: ["prefix"],
     });
 
-    const folders = subfolders.map((subfolder) => {
-      const folderName = subfolder.prefix
-        .replace(normalizedPrefix, "")
-        .split("/")
-        .filter(Boolean)[0];
-      return folderName;
+    const folderSet = new Set<string>();
+    const files: Prisma.StorageObjectGetPayload<{}>[] = [];
+
+    objects.forEach((obj) => {
+      if (obj.prefix === normalizedPrefix) {
+        files.push(obj);
+      } else {
+        const relativePath = obj.prefix.replace(normalizedPrefix, "");
+        const folderName = relativePath.split("/").filter(Boolean)[0];
+        if (folderName) {
+          folderSet.add(folderName);
+        }
+      }
     });
 
-    const uniqueFolders = [...new Set(folders)];
+    const uniqueFolders = [...folderSet];
 
     const breadcrumbs = prefix === "/" ? [] : prefix.split("/").filter(Boolean);
 
@@ -171,35 +164,9 @@ export const ObjectService = {
         type: "folder",
         name: folder,
       })),
-      files: objects.filter((obj) => !obj.isFolder),
+      files,
       breadcrumbs,
     };
-  },
-
-  /**
-   * Generate an access link for a file.
-   */
-  async generateAccessLink(
-    userId: string,
-    objectId: string,
-    expiresInSeconds: number
-  ) {
-    const object = await prisma.storageObject.findUnique({
-      where: { id: objectId, userId },
-    });
-
-    if (!object) {
-      throw new CustomError("File not found", "FILE_NOT_FOUND", 404);
-    }
-
-    const savedAccessLink = await prisma.accessLink.create({
-      data: {
-        objectId,
-        expiresAt: new Date(Date.now() + expiresInSeconds * 1000),
-      },
-    });
-
-    return savedAccessLink;
   },
 
   /**
