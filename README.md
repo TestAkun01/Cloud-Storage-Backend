@@ -4,14 +4,14 @@ Template ini dibuat menggunakan [create-elysiajs](https://github.com/kravetsone/
 
 ## Teknologi yang Digunakan
 
-* **Framework Backend** : [ElysiaJS](https://elysiajs.com/)
-* **Database & ORM** : [Prisma](https://www.prisma.io/) + [PostgreSQL](https://www.postgresql.org/)
-* **Linter** : [ESLint](https://eslint.org/)
-* **Plugins Elysia** :
-* [CORS](https://elysiajs.com/plugins/cors.html) - Mengelola kebijakan akses lintas domain
-* [Swagger](https://elysiajs.com/plugins/swagger.html) - Dokumentasi API interaktif
-* [JWT](https://elysiajs.com/plugins/jwt.html) - Autentikasi berbasis JSON Web Token
-* [Logger](https://github.com/bogeychan/elysia-logger) - Logging request dan response
+- **Framework Backend** : [ElysiaJS](https://elysiajs.com/)
+- **Database & ORM** : [Prisma](https://www.prisma.io/) + [PostgreSQL](https://www.postgresql.org/)
+- **Linter** : [ESLint](https://eslint.org/)
+- **Plugins Elysia** :
+- [CORS](https://elysiajs.com/plugins/cors.html) - Mengelola kebijakan akses lintas domain
+- [Swagger](https://elysiajs.com/plugins/swagger.html) - Dokumentasi API interaktif
+- [JWT](https://elysiajs.com/plugins/jwt.html) - Autentikasi berbasis JSON Web Token
+- [Logger](https://github.com/bogeychan/elysia-logger) - Logging request dan response
 
 ## Cara Menjalankan Proyek
 
@@ -21,15 +21,17 @@ Template ini dibuat menggunakan [create-elysiajs](https://github.com/kravetsone/
    ```bash
    bun install
    ```
+
 3. **Konfigurasi Database**
 
-   * Pastikan PostgreSQL sudah berjalan
-   * Atur `.env` dengan koneksi database
-   * Jalankan migrasi
+   - Pastikan PostgreSQL sudah berjalan
+   - Atur `.env` dengan koneksi database
+   - Jalankan migrasi
 
      ```bash
      bun migrate
      ```
+
 4. **Menjalankan Server**
 
    ```bash
@@ -46,55 +48,62 @@ Swagger dapat diakses di `http://localhost:3000/swagger` setelah server berjalan
 
 ### **Autentikasi**
 
-* [ ] `POST /auth/register` → Register user baru
-* [ ] `POST /auth/login` → Login dan mendapatkan access token + refresh token
-* [ ] `POST /auth/refresh` → Mendapatkan access token baru dari refresh token
-* [ ] `POST /auth/logout` → Logout dan revoke refresh token
+- [x] `POST /auth/register` → Register user baru
+- [x] `POST /auth/login` → Login dan mendapatkan access token + refresh token
+- [x] `POST /auth/refresh` → Mendapatkan access token baru dari refresh token
+- [x] `POST /auth/logout` → Logout dan revoke refresh token
 
 ### **User**
 
-* [ ] `GET /users/me` → Mendapatkan detail user yang sedang login
-* [ ] `GET /users/storage` → Melihat kuota penyimpanan yang terpakai
+- [ ] `GET /users/me` → Mendapatkan detail user yang sedang login
+- [ ] `GET /users/storage` → Melihat kuota penyimpanan yang terpakai
 
 ### **File Management**
 
-* [ ] `POST /files/upload` → Upload file baru
-* [ ] `GET /files` → List semua file user
-* [ ] `GET /files/:id` → Mendapatkan detail file
-* [ ] `GET /files/:id/download` → Download file
-* [ ] `PUT /files/:id` → Update metadata file (misal rename)
-* [ ] `DELETE /files/:id` → Hapus file (ke trash)
-* [ ] `GET /files/:id/versions` → Melihat versi file sebelumnya
-* [ ] `POST /files/:id/restore` → Mengembalikan file dari trash
+- [x] `POST /files/upload` → Upload file baru
+- [x] `GET /files` → List semua file user
+- [x] `GET /files/:id` → Mendapatkan detail file
+- [x] `GET /files/:id/download` → Download file (to do: menambahkan link download asli)
+- [x] `PUT /files/:id` → Update metadata file (misal rename) (to do: menambahkan ekstensi di nama yang baru)
+- [x] `DELETE /files/:id` → Hapus file (ke trash)
+- [x] `GET /files/:id/versions` → Melihat versi file sebelumnya
+- [x] `POST /files/:id/restore` → Mengembalikan file dari trash
+
+### File Versioning Management
+
+- [ ] `GET /files/:id/versions `→ Melihat semua versi file
+- [ ] `POST /files/:id/versions `→ Menambahkan versi baru
+- [ ] `GET /files/:id/versions/:versionId/restore `→ Mengembalikan file ke versi tertentu
 
 ### **Folder Management**
 
-* [ ] `POST /folders` → Membuat folder baru
-* [ ] `GET /folders` → List folder user
-* [ ] `GET /folders/:id` → Melihat isi folder
-* [ ] `PUT /folders/:id` → Rename folder
-* [ ] `DELETE /folders/:id` → Hapus folder (ke trash)
+- [x] `POST /folders` → Membuat folder baru
+- [x] `GET /folders` → List folder user
+- [x] `GET /folders/:id` → Melihat isi folder
+- [x] `PUT /folders/:id` → Rename folder
+- [x] `DELETE /folders/:id` → Hapus folder (ke trash)
+- [x] `POST /files/:id/restore` → Mengembalikan folder dari trash
 
 ### **Sharing**
 
-* [ ] `POST /share` → Membagikan file/folder ke user lain
-* [ ] `GET /share` → List file/folder yang dibagikan
-* [ ] `DELETE /share/:id` → Menghapus akses berbagi
+- [ ] `POST /share` → Membagikan file/folder ke user lain
+- [ ] `GET /share` → List file/folder yang dibagikan
+- [ ] `DELETE /share/:id` → Menghapus akses berbagi
 
 ### **Trash (Recycle Bin)**
 
-* [ ] `GET /trash` → Melihat file/folder yang dihapus
-* [ ] `POST /trash/restore/:id` → Mengembalikan file/folder dari trash
-* [ ] `DELETE /trash/:id` → Hapus permanen file/folder
+- [ ] `GET /trash` → Melihat file/folder yang dihapus
+- [ ] `POST /trash/restore/:id` → Mengembalikan file/folder dari trash
+- [ ] `DELETE /trash/:id` → Hapus permanen file/folder
 
 ### **Tag & Metadata**
 
-* [ ] `POST /tags` → Menambahkan tag ke file
-* [ ] `GET /tags` → List semua tag
-* [ ] `DELETE /tags/:id` → Menghapus tag
+- [ ] `POST /tags` → Menambahkan tag ke file
+- [ ] `GET /tags` → List semua tag
+- [ ] `DELETE /tags/:id` → Menghapus tag
 
 ### **Webhook**
 
-* [ ] `POST /webhooks` → Menambahkan webhook baru
-* [ ] `GET /webhooks` → List semua webhook
-* [ ] `DELETE /webhooks/:id` → Menghapus webhook
+- [ ] `POST /webhooks` → Menambahkan webhook baru
+- [ ] `GET /webhooks` → List semua webhook
+- [ ] `DELETE /webhooks/:id` → Menghapus webhook

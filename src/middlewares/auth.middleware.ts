@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import JwtPlugin from "../plugins/jwt.plugin";
-import { prisma } from "../db";
+import { prisma } from "../lib/prisma";
 
 export const AuthMiddleware = new Elysia()
   .use(JwtPlugin)
