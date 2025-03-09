@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "usernamehw.errorlens",
+    "YoavBls.pretty-ts-errors",
+    "meganrogge.template-string-converter",
+    "oven.bun-vscode",
+    "dbaeumer.vscode-eslint",
+    "Prisma.prisma",
+    "esbenp.prettier-vscode"
+  ]
+}

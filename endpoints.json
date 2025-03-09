@@ -1,0 +1,130 @@
+[
+  {
+    "method": "POST",
+    "path": "/auth/register"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/login"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/refresh"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/logout"
+  },
+  {
+    "method": "GET",
+    "path": "/activity/user"
+  },
+  {
+    "method": "GET",
+    "path": "/activity/file/{objectId}"
+  },
+  {
+    "method": "GET",
+    "path": "/users/me"
+  },
+  {
+    "method": "PUT",
+    "path": "/users/me"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/me"
+  },
+  {
+    "method": "POST",
+    "path": "/objects/upload"
+  },
+  {
+    "method": "PUT",
+    "path": "/objects/update"
+  },
+  {
+    "method": "GET",
+    "path": "/objects/download/{objectId}"
+  },
+  {
+    "method": "DELETE",
+    "path": "/objects/delete/{objectId}"
+  },
+  {
+    "method": "GET",
+    "path": "/objects/list"
+  },
+  {
+    "method": "PUT",
+    "path": "/objects/move/{objectId}"
+  },
+  {
+    "method": "POST",
+    "path": "/objects/copy/{objectId}"
+  },
+  {
+    "method": "GET",
+    "path": "/tags/"
+  },
+  {
+    "method": "POST",
+    "path": "/tags/"
+  },
+  {
+    "method": "DELETE",
+    "path": "/tags/{id}"
+  },
+  {
+    "method": "POST",
+    "path": "/folders/create"
+  },
+  {
+    "method": "DELETE",
+    "path": "/folders/delete"
+  },
+  {
+    "method": "PUT",
+    "path": "/folders/rename-folder"
+  },
+  {
+    "method": "GET",
+    "path": "/quota/"
+  },
+  {
+    "method": "PUT",
+    "path": "/quota/update"
+  },
+  {
+    "method": "GET",
+    "path": "/search/by-tag"
+  },
+  {
+    "method": "GET",
+    "path": "/search/by-date"
+  },
+  {
+    "method": "GET",
+    "path": "/search/by-keyword"
+  },
+  {
+    "method": "POST",
+    "path": "/share/with-user"
+  },
+  {
+    "method": "POST",
+    "path": "/share/generate-public-link"
+  },
+  {
+    "method": "DELETE",
+    "path": "/share/revoke-access/{accessLinkId}"
+  },
+  {
+    "method": "POST",
+    "path": "/versions/upload/{objectId}"
+  },
+  {
+    "method": "GET",
+    "path": "/"
+  }
+]
