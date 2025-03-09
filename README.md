@@ -21,7 +21,6 @@ Template ini dibuat menggunakan [create-elysiajs](https://github.com/kravetsone/
    ```bash
    bun install
    ```
-
 3. **Konfigurasi Database**
 
    - Pastikan PostgreSQL sudah berjalan
@@ -31,7 +30,6 @@ Template ini dibuat menggunakan [create-elysiajs](https://github.com/kravetsone/
      ```bash
      bun migrate
      ```
-
 4. **Menjalankan Server**
 
    ```bash
@@ -48,10 +46,10 @@ Swagger dapat diakses di `http://localhost:3000/swagger` setelah server berjalan
 
 ### **Autentikasi**
 
-- [x] `POST /auth/register` → Register user baru
-- [x] `POST /auth/login` → Login dan mendapatkan access token + refresh token
-- [x] `POST /auth/refresh` → Mendapatkan access token baru dari refresh token
-- [x] `POST /auth/logout` → Logout dan revoke refresh token
+- [X] `POST /auth/register` → Register user baru
+- [X] `POST /auth/login` → Login dan mendapatkan access token + refresh token
+- [X] `POST /auth/refresh` → Mendapatkan access token baru dari refresh token
+- [X] `POST /auth/logout` → Logout dan revoke refresh token
 
 ### **User**
 
@@ -60,29 +58,29 @@ Swagger dapat diakses di `http://localhost:3000/swagger` setelah server berjalan
 
 ### **File Management**
 
-- [x] `POST /files/upload` → Upload file baru
-- [x] `GET /files` → List semua file user
-- [x] `GET /files/:id` → Mendapatkan detail file
-- [x] `GET /files/:id/download` → Download file (to do: menambahkan link download asli)
-- [x] `PUT /files/:id` → Update metadata file (misal rename) (to do: menambahkan ekstensi di nama yang baru)
-- [x] `DELETE /files/:id` → Hapus file (ke trash)
-- [x] `GET /files/:id/versions` → Melihat versi file sebelumnya
-- [x] `POST /files/:id/restore` → Mengembalikan file dari trash
+- [X] `POST /files/upload` → Upload file baru
+- [X] `GET /files` → List semua file user
+- [X] `GET /files/:id` → Mendapatkan detail file
+- [X] `GET /files/:id/download` → Download file (to do: menambahkan link download asli)
+- [X] `PUT /files/:id` → Update metadata file (misal rename) (to do: menambahkan ekstensi di nama yang baru)
+- [X] `DELETE /files/:id` → Hapus file (ke trash)
+- [X] `GET /files/:id/versions` → Melihat versi file sebelumnya
+- [X] `POST /files/:id/restore` → Mengembalikan file dari trash
 
 ### File Versioning Management
 
-- [ ] `GET /files/:id/versions `→ Melihat semua versi file
-- [ ] `POST /files/:id/versions `→ Menambahkan versi baru
-- [ ] `GET /files/:id/versions/:versionId/restore `→ Mengembalikan file ke versi tertentu
+- [X] `GET /file-versions/:id `→ Melihat semua versi file
+- [X] `POST /files-versions/:id `→ Menambahkan versi baru
+- [X] `GET /file-versions/:id/:versionId/restore `→ Mengembalikan file ke versi tertentu
 
 ### **Folder Management**
 
-- [x] `POST /folders` → Membuat folder baru
-- [x] `GET /folders` → List folder user
-- [x] `GET /folders/:id` → Melihat isi folder
-- [x] `PUT /folders/:id` → Rename folder
-- [x] `DELETE /folders/:id` → Hapus folder (ke trash)
-- [x] `POST /files/:id/restore` → Mengembalikan folder dari trash
+- [X] `POST /folders` → Membuat folder baru
+- [X] `GET /folders` → List folder user
+- [X] `GET /folders/:id` → Melihat isi folder
+- [X] `PUT /folders/:id` → Rename folder
+- [X] `DELETE /folders/:id` → Hapus folder (ke trash)
+- [X] `POST /files/:id/restore` → Mengembalikan folder dari trash
 
 ### **Sharing**
 

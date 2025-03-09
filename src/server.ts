@@ -7,6 +7,7 @@ import { AuthController } from "./controllers/auth.controller.ts";
 import { config } from "./config";
 import { FileController } from "./controllers/file.controller.ts";
 import { FolderController } from "./controllers/folder.controller.ts";
+import { FileVersionController } from "./controllers/fileVersion.controller.ts";
 
 export const app = new Elysia({
   serve: {
@@ -42,6 +43,7 @@ export const app = new Elysia({
   .use(AuthController)
   .use(FileController)
   .use(FolderController)
+  .use(FileVersionController)
   .get("/", () => {
     console.log(config.API_URL);
   });

@@ -7,12 +7,12 @@ import {
 import { CustomError } from "../errors/custom.error";
 import { AuthMiddleware } from "../middlewares/auth.middleware";
 
-export const FileVersionController = new Elysia({ prefix: "/file-version" })
+export const FileVersionController = new Elysia({ prefix: "/file-versions" })
   .use(AuthMiddleware)
-  .get("/:fileId/versions", async ({ params, user, error }) => {
+  .get("/:id", async ({ params, user, error }) => {
     try {
       const versions = await getFileVersions(
-        params.fileId,
+        params.id,
         user.userId?.toString()!
       );
       return { success: true, data: versions };
@@ -35,14 +35,15 @@ export const FileVersionController = new Elysia({ prefix: "/file-version" })
     }
   })
   .post(
-    "/:fileId/versions",
+    "/:id",
     async ({ params, body, user, error }) => {
       try {
+        console.log(user);
+
         const version = await createNewFileVersion(
-          params.fileId,
-          user.userId?.toString()!,
-          body.path,
-          body.size
+          params.id,
+          user.id?.toString()!,
+          body.file
         );
         return { success: true, data: version };
       } catch (err) {
@@ -65,37 +66,33 @@ export const FileVersionController = new Elysia({ prefix: "/file-version" })
     },
     {
       body: t.Object({
-        path: t.String(),
-        size: t.Number(),
+        file: t.File(),
       }),
     }
   )
-  .post(
-    "/:fileId/versions/:versionId/restore",
-    async ({ params, user, error }) => {
-      try {
-        await restoreFileVersion(
-          params.fileId,
-          params.versionId,
-          user.userId?.toString()!
-        );
-        return { success: true, message: "File version restored successfully" };
-      } catch (err) {
-        if (err instanceof CustomError) {
-          return error(err.statusCode, {
-            success: false,
-            message: err.message,
-            error: { code: err.code, details: err.details },
-          });
-        }
-        return error(500, {
+  .post("/:id/:versionId/restore", async ({ params, user, error }) => {
+    try {
+      await restoreFileVersion(
+        params.id,
+        params.versionId,
+        user.userId?.toString()!
+      );
+      return { success: true, message: "File version restored successfully" };
+    } catch (err) {
+      if (err instanceof CustomError) {
+        return error(err.statusCode, {
           success: false,
-          message: "Failed to restore file version",
-          error: {
-            code: "VERSION_RESTORE_FAILED",
-            details: "Internal server error",
-          },
+          message: err.message,
+          error: { code: err.code, details: err.details },
         });
       }
+      return error(500, {
+        success: false,
+        message: "Failed to restore file version",
+        error: {
+          code: "VERSION_RESTORE_FAILED",
+          details: "Internal server error",
+        },
+      });
     }
-  );
+  });
