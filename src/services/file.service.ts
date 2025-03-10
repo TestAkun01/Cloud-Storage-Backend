@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma";
 import { minio } from "../lib/minio";
 import { CustomError } from "../errors/custom.error";
 import { config } from "../config";
+import { checkWritePermission } from "../utils";
 
 export const uploadFile = async (
   userId: string,
@@ -19,6 +20,17 @@ export const uploadFile = async (
 
   if (BigInt(user.usedSpace) + BigInt(file.size) > user.quota) {
     throw new CustomError("Storage quota exceeded", "QUOTA_EXCEEDED", 403);
+  }
+
+  if (folderId) {
+    const hasWritePermission = await checkWritePermission(folderId, userId);
+    if (!hasWritePermission) {
+      throw new CustomError(
+        "No permission to upload here",
+        "NO_PERMISSION",
+        403
+      );
+    }
   }
 
   const filePath = `${userId}/${Date.now()}_${file.name}`;
@@ -52,7 +64,9 @@ export const uploadFile = async (
 
 export const listFiles = async (userId: string) => {
   const files = await prisma.file.findMany({
-    where: { userId, trashed: false },
+    where: {
+      OR: [{ userId, trashed: false }, { sharedWith: { some: { userId } } }],
+    },
     select: {
       id: true,
       name: true,
@@ -74,7 +88,10 @@ export const listFiles = async (userId: string) => {
 
 export const getFileDetail = async (userId: string, fileId: string) => {
   const file = await prisma.file.findUnique({
-    where: { id: fileId, userId },
+    where: {
+      id: fileId,
+      OR: [{ userId }, { sharedWith: { some: { userId } } }],
+    },
     select: {
       id: true,
       name: true,
@@ -103,7 +120,10 @@ export const getFileDetail = async (userId: string, fileId: string) => {
 
 export const getFileDownloadUrl = async (userId: string, fileId: string) => {
   const file = await prisma.file.findUnique({
-    where: { id: fileId, userId },
+    where: {
+      id: fileId,
+      OR: [{ userId }, { sharedWith: { some: { userId } } }],
+    },
     select: {
       id: true,
       path: true,
@@ -129,7 +149,10 @@ export const updateFileMetadata = async (
   name: string
 ) => {
   const file = await prisma.file.findUnique({
-    where: { id: fileId, userId },
+    where: {
+      id: fileId,
+      OR: [{ userId }, { sharedWith: { some: { userId } } }],
+    },
   });
 
   if (!file) {
@@ -151,7 +174,10 @@ export const updateFileMetadata = async (
 
 export const moveFileToTrash = async (userId: string, fileId: string) => {
   const file = await prisma.file.findUnique({
-    where: { id: fileId, userId },
+    where: {
+      id: fileId,
+      OR: [{ userId }, { sharedWith: { some: { userId } } }],
+    },
   });
 
   if (!file) {
@@ -179,9 +205,15 @@ export const moveFileToTrash = async (userId: string, fileId: string) => {
 };
 
 export const restoreFile = async (userId: string, fileId: string) => {
-  const file = await prisma.file.findUnique({
-    where: { id: fileId, userId, trashed: true },
-    include: { trash: true },
+  const file = await prisma.file.findFirst({
+    where: {
+      id: fileId,
+      trashed: true,
+      OR: [
+        { userId },
+        { sharedWith: { some: { userId, permission: "WRITE" } } },
+      ],
+    },
   });
 
   if (!file) {

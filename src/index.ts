@@ -1,4 +1,3 @@
-import { config } from "./config.ts";
 import { prisma } from "./lib/prisma.ts";
 import { app } from "./server.ts";
 
